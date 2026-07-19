@@ -26,7 +26,7 @@
 
   /* ---------- Top bar ---------- */
   #topbar{
-    position:sticky;top:0;z-index:50;
+    position:fixed;top:0;left:0;right:0;z-index:50;
     background:var(--paper);
     border-bottom:1px solid var(--border);
   }
@@ -88,7 +88,7 @@
   /* ---------- Page / editor area ---------- */
   #pagewrap{
     display:flex;justify-content:center;
-    padding:36px 16px 120px;
+    padding:0 16px 120px;
   }
   #page{
     width:100%;max-width:800px;
@@ -558,6 +558,17 @@ ${bodyHtml}
       document.body.style.userSelect = '';
     }
   });
+
+  // ---------- Keep content clear of the fixed toolbar ----------
+  function syncTopbarOffset(){
+    const h = document.getElementById('topbar').offsetHeight;
+    document.getElementById('pagewrap').style.paddingTop = (h + 36) + 'px';
+  }
+  window.addEventListener('resize', syncTopbarOffset);
+  window.addEventListener('load', syncTopbarOffset);
+  syncTopbarOffset();
+  // re-check shortly after in case fonts/layout shift the toolbar height
+  setTimeout(syncTopbarOffset, 200);
 
   editor.focus();
 })();
