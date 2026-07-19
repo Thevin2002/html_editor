@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML Doc Editor</title>
+<style>
+  :root{
+    --bg:#f4f3ee;
+    --paper:#ffffff;
+    --ink:#1f1e1c;
+    --ink-soft:#5b5952;
+    --border:#ddd9cf;
+    --border-strong:#c7c2b4;
+    --accent:#b5502f;
+    --accent-soft:#f1e2da;
+    --toolbar-h:104px;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;height:100%;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  }
+
+  /* ---------- Top bar ---------- */
+  #topbar{
+    position:sticky;top:0;z-index:50;
+    background:var(--paper);
+    border-bottom:1px solid var(--border);
+  }
+  #filebar{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 16px;
+    border-bottom:1px solid var(--border);
+  }
+  #filebar .fname{
+    font-size:13px;color:var(--ink-soft);
+    flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .btn{
+    display:inline-flex;align-items:center;gap:6px;
+    background:var(--paper);
+    border:1px solid var(--border-strong);
+    color:var(--ink);
+    font-size:13px;
+    padding:6px 12px;
+    border-radius:6px;
+    cursor:pointer;
+    font-family:inherit;
+    white-space:nowrap;
+  }
+  .btn:hover{background:#faf9f5;border-color:var(--accent);}
+  .btn:active{transform:scale(0.98);}
+  .btn.primary{
+    background:var(--accent);border-color:var(--accent);color:#fff;
+  }
+  .btn.primary:hover{background:#9c4527;}
+  .btn:disabled{opacity:0.4;cursor:not-allowed;}
+  #hiddenFileInput,#hiddenImageInput{display:none;}
+
+  /* ---------- Formatting toolbar ---------- */
+  #toolbar{
+    display:flex;flex-wrap:wrap;align-items:center;gap:4px;
+    padding:8px 16px;
+  }
+  #toolbar select{
+    height:30px;border:1px solid var(--border-strong);border-radius:6px;
+    background:var(--paper);font-size:13px;padding:0 6px;font-family:inherit;color:var(--ink);
+  }
+  .tbtn{
+    height:30px;min-width:30px;
+    display:inline-flex;align-items:center;justify-content:center;
+    border:1px solid transparent;
+    border-radius:6px;
+    background:transparent;
+    cursor:pointer;
+    font-size:14px;
+    padding:0 8px;
+    color:var(--ink);
+    font-family:inherit;
+  }
+  .tbtn:hover{background:var(--accent-soft);}
+  .tbtn.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
+  .tsep{width:1px;align-self:stretch;background:var(--border);margin:4px 6px;}
+
+  /* ---------- Page / editor area ---------- */
+  #pagewrap{
+    display:flex;justify-content:center;
+    padding:36px 16px 120px;
+  }
+  #page{
+    width:100%;max-width:800px;
+    background:var(--paper);
+    border:1px solid var(--border);
+    box-shadow:0 1px 3px rgba(0,0,0,0.06);
+    min-height:1000px;
+    padding:64px 72px;
+  }
+  #editor{
+    outline:none;
+    font-size:16px;
+    line-height:1.7;
+    color:var(--ink);
+  }
+  #editor h1{font-size:30px;font-weight:700;margin:0 0 12px;line-height:1.25;}
+  #editor h2{font-size:23px;font-weight:700;margin:28px 0 10px;line-height:1.3;}
+  #editor h3{font-size:19px;font-weight:700;margin:22px 0 8px;line-height:1.35;}
+  #editor p{margin:0 0 14px;}
+  #editor ul,#editor ol{margin:0 0 14px;padding-left:28px;}
+  #editor li{margin:4px 0;}
+  #editor a{color:var(--accent);}
+  #editor img{max-width:100%!important;height:auto!important;border-radius:4px;display:inline-block;}
+  #editor img.selected-img{outline:2px solid var(--accent);outline-offset:2px;}
+  #imgToolbar{
+    position:absolute;display:none;z-index:100;
+    background:var(--paper);border:1px solid var(--border-strong);
+    border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);
+    padding:6px;gap:4px;align-items:center;
+  }
+  #imgToolbar .tbtn{font-size:12px;padding:0 10px;}
+  #imgHandle{
+    position:absolute;width:14px;height:14px;
+    background:var(--accent);border:2px solid #fff;border-radius:50%;
+    cursor:nwse-resize;display:none;z-index:99;
+    box-shadow:0 1px 3px rgba(0,0,0,0.3);
+  }
+  #editor table{border-collapse:collapse;width:100%;margin:0 0 16px;}
+  #editor table td,#editor table th{border:1px solid var(--border-strong);padding:8px 10px;text-align:left;font-size:15px;}
+  #editor table th{background:#faf9f5;font-weight:700;}
+  #editor blockquote{
+    margin:0 0 14px;padding:4px 0 4px 16px;
+    border-left:3px solid var(--accent);
+    color:var(--ink-soft);font-style:italic;
+  }
+  #editor hr{border:none;border-top:1px solid var(--border-strong);margin:24px 0;}
+  #editor:empty:before{
+    content:"Upload an HTML file to begin editing, or start typing here...";
+    color:#a29e93;
+  }
+
+  /* empty state */
+  #emptyState{
+    text-align:center;padding:80px 20px;color:var(--ink-soft);
+  }
+  #emptyState h2{font-size:18px;font-weight:600;color:var(--ink);margin:0 0 8px;}
+  #emptyState p{font-size:14px;margin:0 0 20px;}
+
+  /* status */
+  #status{
+    font-size:12px;color:var(--ink-soft);padding:0 4px;
+  }
+
+  /* table insert popover */
+  #tablePopover{
+    position:absolute;display:none;
+    background:var(--paper);border:1px solid var(--border-strong);
+    border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);
+    padding:14px;z-index:100;
+  }
+  #tablePopover label{display:block;font-size:12px;color:var(--ink-soft);margin-bottom:4px;}
+  #tablePopover input{
+    width:60px;height:28px;border:1px solid var(--border-strong);border-radius:5px;
+    padding:0 8px;font-size:13px;margin-bottom:10px;font-family:inherit;
+  }
+  #tablePopover .row{display:flex;gap:12px;}
+
+  a.link-edit-target{background:var(--accent-soft);}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div id="filebar">
+    <button class="btn" id="btnUpload"><span>&#128193;</span> Open HTML file</button>
+    <span class="fname" id="fname">No file loaded — editing a blank document</span>
+    <button class="btn" id="btnNew">New</button>
+    <button class="btn primary" id="btnExport">&#8681; Export HTML</button>
+  </div>
+  <div id="toolbar">
+    <select id="blockType" title="Paragraph style">
+      <option value="p">Paragraph</option>
+      <option value="h1">Heading 1</option>
+      <option value="h2">Heading 2</option>
+      <option value="h3">Heading 3</option>
+      <option value="blockquote">Quote</option>
+    </select>
+    <div class="tsep"></div>
+    <button class="tbtn" data-cmd="bold" title="Bold"><b>B</b></button>
+    <button class="tbtn" data-cmd="italic" title="Italic"><i>I</i></button>
+    <button class="tbtn" data-cmd="underline" title="Underline"><u>U</u></button>
+    <button class="tbtn" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+    <div class="tsep"></div>
+    <button class="tbtn" data-cmd="insertUnorderedList" title="Bullet list">&#8226; list</button>
+    <button class="tbtn" data-cmd="insertOrderedList" title="Numbered list">1. list</button>
+    <div class="tsep"></div>
+    <button class="tbtn" data-cmd="justifyLeft" title="Align left">&#8676;</button>
+    <button class="tbtn" data-cmd="justifyCenter" title="Align center">&#8596;</button>
+    <button class="tbtn" data-cmd="justifyRight" title="Align right">&#8677;</button>
+    <div class="tsep"></div>
+    <button class="tbtn" id="btnLink" title="Insert link">&#128279;</button>
+    <button class="tbtn" id="btnImage" title="Insert image">&#128247;</button>
+    <button class="tbtn" id="btnTable" title="Insert table">&#9638; table</button>
+    <button class="tbtn" id="btnHr" title="Insert divider">&#8213;</button>
+    <div class="tsep"></div>
+    <button class="tbtn" data-cmd="removeFormat" title="Clear formatting">Clear</button>
+    <button class="tbtn" data-cmd="undo" title="Undo">&#8630;</button>
+    <button class="tbtn" data-cmd="redo" title="Redo">&#8631;</button>
+  </div>
+</div>
+
+<div id="pagewrap">
+  <div id="page">
+    <div id="editor" contenteditable="true"></div>
+  </div>
+</div>
+
+<div id="tablePopover">
+  <div class="row">
+    <div>
+      <label>Rows</label>
+      <input type="number" id="tableRows" value="3" min="1" max="20">
+    </div>
+    <div>
+      <label>Columns</label>
+      <input type="number" id="tableCols" value="3" min="1" max="10">
+    </div>
+  </div>
+  <button class="btn primary" id="tableInsertGo" style="width:100%;justify-content:center;">Insert table</button>
+</div>
+
+<div id="imgToolbar">
+  <button class="tbtn" data-size="25">25%</button>
+  <button class="tbtn" data-size="50">50%</button>
+  <button class="tbtn" data-size="75">75%</button>
+  <button class="tbtn" data-size="100">Fit page</button>
+  <button class="tbtn" data-align="left" title="Align left">&#8676;</button>
+  <button class="tbtn" data-align="center" title="Center">&#8596;</button>
+  <button class="tbtn" data-align="right" title="Align right">&#8677;</button>
+</div>
+<div id="imgHandle"></div>
+
+<input type="file" id="hiddenFileInput" accept=".html,.htm">
+<input type="file" id="hiddenImageInput" accept="image/*">
+
+<script>
+(function(){
+  const editor = document.getElementById('editor');
+  const fname = document.getElementById('fname');
+  let originalHead = { title: 'Document', styles: [] };
+  let loadedOnce = false;
+
+  // ---------- File open ----------
+  document.getElementById('btnUpload').addEventListener('click', () => {
+    document.getElementById('hiddenFileInput').click();
+  });
+
+  document.getElementById('hiddenFileInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      loadHtmlString(evt.target.result, file.name);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  });
+
+  function loadHtmlString(htmlStr, name) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlStr, 'text/html');
+
+    // capture title
+    originalHead.title = doc.title || 'Document';
+
+    // capture any <style> blocks so we can round-trip look-and-feel
+    originalHead.styles = Array.from(doc.querySelectorAll('style')).map(s => s.textContent);
+
+    // Use body content only, rendered
+    const body = doc.body || doc.documentElement;
+
+    // Inline any external images into base64 is not possible without fetch (cross-origin),
+    // so we leave <img src> as-is; local file images will simply show broken until re-added.
+    editor.innerHTML = body.innerHTML.trim();
+
+    fname.textContent = name;
+    loadedOnce = true;
+    updateStatus();
+  }
+
+  document.getElementById('btnNew').addEventListener('click', () => {
+    if (editor.innerHTML.trim() && !confirm('Start a new blank document? Unsaved changes will be lost.')) return;
+    editor.innerHTML = '';
+    originalHead = { title: 'Document', styles: [] };
+    fname.textContent = 'No file loaded — editing a blank document';
+    loadedOnce = false;
+  });
+
+  // ---------- Export ----------
+  document.getElementById('btnExport').addEventListener('click', () => {
+    const bodyHtml = editor.innerHTML;
+    const styleBlock = originalHead.styles.length
+      ? originalHead.styles.join('\n')
+      : `body{font-family:Georgia,'Times New Roman',serif;line-height:1.6;max-width:800px;margin:40px auto;padding:0 24px;color:#1f1e1c;}
+h1,h2,h3{font-family:-apple-system,Helvetica,Arial,sans-serif;font-weight:700;}
+table{border-collapse:collapse;width:100%;}
+td,th{border:1px solid #ccc;padding:8px 10px;}
+th{background:#f5f5f5;}
+img{max-width:100%;height:auto;}
+blockquote{border-left:3px solid #b5502f;margin:0;padding-left:16px;color:#555;font-style:italic;}`;
+
+    const fullHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${escapeHtml(originalHead.title)}</title>
+<style>
+${styleBlock}
+</style>
+</head>
+<body>
+${bodyHtml}
+</body>
+</html>`;
+
+    const blob = new Blob([fullHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const baseName = (fname.textContent && loadedOnce)
+      ? fname.textContent.replace(/\.html?$/i, '')
+      : 'document';
+    a.href = url;
+    a.download = baseName + '-edited.html';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  });
+
+  function escapeHtml(str){
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  // ---------- Formatting toolbar ----------
+  document.querySelectorAll('.tbtn[data-cmd]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editor.focus();
+      document.execCommand(btn.dataset.cmd, false, null);
+      updateToolbarState();
+    });
+  });
+
+  document.getElementById('blockType').addEventListener('change', (e) => {
+    editor.focus();
+    document.execCommand('formatBlock', false, e.target.value);
+  });
+
+  document.getElementById('btnHr').addEventListener('click', () => {
+    editor.focus();
+    document.execCommand('insertHorizontalRule', false, null);
+  });
+
+  document.getElementById('btnLink').addEventListener('click', () => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) {
+      alert('Select some text first, then click the link button.');
+      return;
+    }
+    const url = prompt('Enter URL:', 'https://');
+    if (url) {
+      editor.focus();
+      document.execCommand('createLink', false, url);
+    }
+  });
+
+  // ---------- Image insert ----------
+  document.getElementById('btnImage').addEventListener('click', () => {
+    document.getElementById('hiddenImageInput').click();
+  });
+  document.getElementById('hiddenImageInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      editor.focus();
+      document.execCommand('insertImage', false, evt.target.result);
+      const imgs = editor.querySelectorAll('img:not([data-sized])');
+      imgs.forEach(img => {
+        img.setAttribute('data-sized', '1');
+        img.style.maxWidth = '100%';
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  });
+
+  // ---------- Table insert ----------
+  const tablePop = document.getElementById('tablePopover');
+  const btnTable = document.getElementById('btnTable');
+  btnTable.addEventListener('click', () => {
+    const rect = btnTable.getBoundingClientRect();
+    tablePop.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+    tablePop.style.left = (rect.left + window.scrollX) + 'px';
+    tablePop.style.display = tablePop.style.display === 'block' ? 'none' : 'block';
+  });
+  document.addEventListener('click', (e) => {
+    if (!tablePop.contains(e.target) && e.target !== btnTable) {
+      tablePop.style.display = 'none';
+    }
+  });
+  document.getElementById('tableInsertGo').addEventListener('click', () => {
+    const rows = Math.max(1, parseInt(document.getElementById('tableRows').value) || 1);
+    const cols = Math.max(1, parseInt(document.getElementById('tableCols').value) || 1);
+    let html = '<table>';
+    for (let r = 0; r < rows; r++) {
+      html += '<tr>';
+      for (let c = 0; c < cols; c++) {
+        html += (r === 0) ? '<th>Header</th>' : '<td>Cell</td>';
+      }
+      html += '</tr>';
+    }
+    html += '</table><p><br></p>';
+    editor.focus();
+    document.execCommand('insertHTML', false, html);
+    tablePop.style.display = 'none';
+  });
+
+  // ---------- Toolbar active state ----------
+  function updateToolbarState() {
+    document.querySelectorAll('.tbtn[data-cmd]').forEach(btn => {
+      try {
+        const active = document.queryCommandState(btn.dataset.cmd);
+        btn.classList.toggle('active', !!active);
+      } catch(e){}
+    });
+  }
+  editor.addEventListener('keyup', updateToolbarState);
+  editor.addEventListener('mouseup', updateToolbarState);
+
+  function updateStatus(){}
+
+  // ---------- Drag & drop file onto page ----------
+  document.getElementById('pagewrap').addEventListener('dragover', (e) => {
+    e.preventDefault();
+  });
+  document.getElementById('pagewrap').addEventListener('drop', (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        editor.focus();
+        document.execCommand('insertImage', false, evt.target.result);
+      };
+      reader.readAsDataURL(file);
+    } else if (file.name.match(/\.html?$/i)) {
+      const reader = new FileReader();
+      reader.onload = (evt) => loadHtmlString(evt.target.result, file.name);
+      reader.readAsText(file);
+    }
+  });
+
+  // ---------- Image select / resize ----------
+  const imgToolbar = document.getElementById('imgToolbar');
+  const imgHandle = document.getElementById('imgHandle');
+  let selectedImg = null;
+
+  function positionImageUI(){
+    if (!selectedImg) return;
+    const r = selectedImg.getBoundingClientRect();
+    imgToolbar.style.display = 'flex';
+    imgToolbar.style.top = (r.top + window.scrollY - 44) + 'px';
+    imgToolbar.style.left = (r.left + window.scrollX) + 'px';
+    imgHandle.style.display = 'block';
+    imgHandle.style.top = (r.bottom + window.scrollY - 7) + 'px';
+    imgHandle.style.left = (r.right + window.scrollX - 7) + 'px';
+  }
+
+  function selectImage(img){
+    if (selectedImg) selectedImg.classList.remove('selected-img');
+    selectedImg = img;
+    selectedImg.classList.add('selected-img');
+    positionImageUI();
+  }
+
+  function deselectImage(){
+    if (selectedImg) selectedImg.classList.remove('selected-img');
+    selectedImg = null;
+    imgToolbar.style.display = 'none';
+    imgHandle.style.display = 'none';
+  }
+
+  editor.addEventListener('click', (e) => {
+    if (e.target.tagName === 'IMG') {
+      selectImage(e.target);
+    } else {
+      deselectImage();
+    }
+  });
+
+  document.addEventListener('scroll', () => { if (selectedImg) positionImageUI(); }, true);
+  window.addEventListener('resize', () => { if (selectedImg) positionImageUI(); });
+
+  document.addEventListener('click', (e) => {
+    if (selectedImg && !imgToolbar.contains(e.target) && e.target !== imgHandle && e.target !== selectedImg) {
+      deselectImage();
+    }
+  });
+
+  imgToolbar.addEventListener('click', (e) => {
+    const btn = e.target.closest('.tbtn');
+    if (!btn || !selectedImg) return;
+    if (btn.dataset.size) {
+      const pct = btn.dataset.size;
+      if (pct === '100') {
+        selectedImg.style.width = '100%';
+      } else {
+        selectedImg.style.width = pct + '%';
+      }
+      selectedImg.style.height = 'auto';
+      positionImageUI();
+    } else if (btn.dataset.align) {
+      const align = btn.dataset.align;
+      selectedImg.style.display = 'block';
+      if (align === 'center') selectedImg.style.margin = '0 auto 14px';
+      else if (align === 'left') selectedImg.style.margin = '0 auto 14px 0';
+      else selectedImg.style.margin = '0 0 14px auto';
+      positionImageUI();
+    }
+  });
+
+  // drag-to-resize
+  let dragging = false, dragStartX = 0, dragStartWidth = 0;
+  imgHandle.addEventListener('mousedown', (e) => {
+    if (!selectedImg) return;
+    e.preventDefault();
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartWidth = selectedImg.getBoundingClientRect().width;
+    document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging || !selectedImg) return;
+    const pageWidth = document.getElementById('page').clientWidth - 144;
+    let newWidth = dragStartWidth + (e.clientX - dragStartX);
+    newWidth = Math.max(40, Math.min(newWidth, pageWidth));
+    selectedImg.style.width = newWidth + 'px';
+    selectedImg.style.height = 'auto';
+    positionImageUI();
+  });
+  document.addEventListener('mouseup', () => {
+    if (dragging) {
+      dragging = false;
+      document.body.style.userSelect = '';
+    }
+  });
+
+  editor.focus();
+})();
+</script>
+
+</body>
+</html>
