@@ -85,6 +85,33 @@
   .tbtn.active{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);}
   .tsep{width:1px;align-self:stretch;background:var(--border);margin:4px 6px;}
 
+  /* text color button */
+  #btnColor{position:relative;flex-direction:column;padding:2px 8px;gap:0;}
+  #btnColor .colorBar{
+    width:16px;height:3px;border-radius:2px;background:var(--accent);margin-top:1px;
+  }
+  #colorPopover{
+    position:absolute;display:none;
+    background:var(--paper);border:1px solid var(--border-strong);
+    border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);
+    padding:12px;z-index:100;width:184px;
+  }
+  #colorPopover .swatchGrid{
+    display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-bottom:10px;
+  }
+  #colorPopover .swatch{
+    width:18px;height:18px;border-radius:4px;cursor:pointer;
+    border:1px solid rgba(0,0,0,0.12);
+  }
+  #colorPopover .swatch:hover{transform:scale(1.12);}
+  #colorPopover .customRow{
+    display:flex;align-items:center;gap:8px;border-top:1px solid var(--border);padding-top:10px;
+  }
+  #colorPopover .customRow label{font-size:12px;color:var(--ink-soft);}
+  #colorPopover input[type=color]{
+    width:34px;height:26px;border:1px solid var(--border-strong);border-radius:5px;padding:0;cursor:pointer;
+  }
+
   /* ---------- Page / editor area ---------- */
   #pagewrap{
     display:flex;justify-content:center;
@@ -193,6 +220,10 @@
     <button class="tbtn" data-cmd="italic" title="Italic"><i>I</i></button>
     <button class="tbtn" data-cmd="underline" title="Underline"><u>U</u></button>
     <button class="tbtn" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+    <button class="tbtn" id="btnColor" title="Text color">
+      <span style="font-weight:700;">A</span>
+      <span class="colorBar" id="colorBarPreview"></span>
+    </button>
     <div class="tsep"></div>
     <button class="tbtn" data-cmd="insertUnorderedList" title="Bullet list">&#8226; list</button>
     <button class="tbtn" data-cmd="insertOrderedList" title="Numbered list">1. list</button>
@@ -230,6 +261,14 @@
     </div>
   </div>
   <button class="btn primary" id="tableInsertGo" style="width:100%;justify-content:center;">Insert table</button>
+</div>
+
+<div id="colorPopover">
+  <div class="swatchGrid" id="swatchGrid"></div>
+  <div class="customRow">
+    <label for="customColor">Custom</label>
+    <input type="color" id="customColor" value="#b5502f">
+  </div>
 </div>
 
 <div id="imgToolbar">
@@ -490,6 +529,60 @@ ${bodyHtml}
     reader.readAsDataURL(file);
     e.target.value = '';
   });
+
+  // ---------- Text color ----------
+  const colorPop = document.getElementById('colorPopover');
+  const btnColor = document.getElementById('btnColor');
+  const colorBarPreview = document.getElementById('colorBarPreview');
+  const swatchGrid = document.getElementById('swatchGrid');
+  const customColor = document.getElementById('customColor');
+  const presetColors = [
+    '#1f1e1c', '#5b5952', '#b5502f', '#c0392b',
+    '#d35400', '#e67e22', '#f1c40f', '#27ae60',
+    '#16a085', '#2980b9', '#2c3e50', '#8e44ad',
+    '#c0392b', '#7f8c8d', '#ffffff', '#000000'
+  ];
+  presetColors.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'swatch';
+    sw.style.background = c;
+    sw.title = c;
+    sw.addEventListener('click', () => applyTextColor(c));
+    swatchGrid.appendChild(sw);
+  });
+
+  let savedSelectionRange = null;
+
+  btnColor.addEventListener('click', () => {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+      savedSelectionRange = sel.getRangeAt(0).cloneRange();
+    }
+    const rect = btnColor.getBoundingClientRect();
+    colorPop.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+    colorPop.style.left = (rect.left + window.scrollX) + 'px';
+    colorPop.style.display = colorPop.style.display === 'block' ? 'none' : 'block';
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!colorPop.contains(e.target) && e.target !== btnColor && !btnColor.contains(e.target)) {
+      colorPop.style.display = 'none';
+    }
+  });
+
+  customColor.addEventListener('input', () => applyTextColor(customColor.value));
+
+  function applyTextColor(color) {
+    editor.focus();
+    if (savedSelectionRange) {
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(savedSelectionRange);
+    }
+    document.execCommand('foreColor', false, color);
+    colorBarPreview.style.background = color;
+    colorPop.style.display = 'none';
+  }
 
   // ---------- Table insert ----------
   const tablePop = document.getElementById('tablePopover');
