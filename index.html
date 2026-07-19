@@ -175,8 +175,10 @@
   <div id="filebar">
     <button class="btn" id="btnUpload"><span>&#128193;</span> Open HTML file</button>
     <span class="fname" id="fname">No file loaded — editing a blank document</span>
+    <span id="saveStatus" style="font-size:12px;color:var(--ink-soft);"></span>
     <button class="btn" id="btnNew">New</button>
-    <button class="btn primary" id="btnExport">&#8681; Export HTML</button>
+    <button class="btn" id="btnSaveAs">Save As…</button>
+    <button class="btn primary" id="btnSave">&#128190; Save</button>
   </div>
   <div id="toolbar">
     <select id="blockType" title="Paragraph style">
@@ -248,17 +250,40 @@
 (function(){
   const editor = document.getElementById('editor');
   const fname = document.getElementById('fname');
+  const saveStatus = document.getElementById('saveStatus');
   let originalHead = { title: 'Document', styles: [] };
   let loadedOnce = false;
+  let currentFileHandle = null;
+  const fsSupported = 'showOpenFilePicker' in window;
+
+  if (!fsSupported) {
+    saveStatus.textContent = '(this browser will download a copy on save — use Chrome or Edge to save in place)';
+  }
 
   // ---------- File open ----------
-  document.getElementById('btnUpload').addEventListener('click', () => {
-    document.getElementById('hiddenFileInput').click();
+  document.getElementById('btnUpload').addEventListener('click', async () => {
+    if (fsSupported) {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          types: [{ description: 'HTML Files', accept: { 'text/html': ['.html', '.htm'] } }],
+        });
+        currentFileHandle = handle;
+        const file = await handle.getFile();
+        const text = await file.text();
+        loadHtmlString(text, file.name);
+        saveStatus.textContent = 'Editing this file directly — Save will overwrite it';
+      } catch (err) {
+        if (err.name !== 'AbortError') console.error(err);
+      }
+    } else {
+      document.getElementById('hiddenFileInput').click();
+    }
   });
 
   document.getElementById('hiddenFileInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    currentFileHandle = null;
     const reader = new FileReader();
     reader.onload = (evt) => {
       loadHtmlString(evt.target.result, file.name);
@@ -286,7 +311,6 @@
 
     fname.textContent = name;
     loadedOnce = true;
-    updateStatus();
   }
 
   document.getElementById('btnNew').addEventListener('click', () => {
@@ -295,10 +319,12 @@
     originalHead = { title: 'Document', styles: [] };
     fname.textContent = 'No file loaded — editing a blank document';
     loadedOnce = false;
+    currentFileHandle = null;
+    saveStatus.textContent = fsSupported ? '' : '(this browser will download a copy on save — use Chrome or Edge to save in place)';
   });
 
-  // ---------- Export ----------
-  document.getElementById('btnExport').addEventListener('click', () => {
+  // ---------- Build the exportable HTML string ----------
+  function buildFullHtml() {
     const bodyHtml = editor.innerHTML;
     const styleBlock = originalHead.styles.length
       ? originalHead.styles.join('\n')
@@ -310,7 +336,7 @@ th{background:#f5f5f5;}
 img{max-width:100%;height:auto;}
 blockquote{border-left:3px solid #b5502f;margin:0;padding-left:16px;color:#555;font-style:italic;}`;
 
-    const fullHtml = `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -323,7 +349,24 @@ ${styleBlock}
 ${bodyHtml}
 </body>
 </html>`;
+  }
 
+  function escapeHtml(str){
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function flashSaved(msg){
+    saveStatus.textContent = msg || 'Saved ✓';
+    clearTimeout(flashSaved._t);
+    flashSaved._t = setTimeout(() => {
+      if (currentFileHandle) saveStatus.textContent = 'Editing this file directly — Save will overwrite it';
+      else saveStatus.textContent = fsSupported ? '' : '(this browser will download a copy on save — use Chrome or Edge to save in place)';
+    }, 2200);
+  }
+
+  function downloadCopy(fullHtml){
     const blob = new Blob([fullHtml], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -336,13 +379,64 @@ ${bodyHtml}
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 2000);
-  });
-
-  function escapeHtml(str){
-    const d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
+    flashSaved('Downloaded copy ✓');
   }
+
+  // ---------- Save (overwrites the opened file when possible) ----------
+  async function saveFile(forceSaveAs) {
+    const fullHtml = buildFullHtml();
+
+    if (currentFileHandle && !forceSaveAs) {
+      try {
+        const opts = { mode: 'readwrite' };
+        if ((await currentFileHandle.queryPermission(opts)) !== 'granted') {
+          if ((await currentFileHandle.requestPermission(opts)) !== 'granted') {
+            alert('Permission to save was denied.');
+            return;
+          }
+        }
+        const writable = await currentFileHandle.createWritable();
+        await writable.write(fullHtml);
+        await writable.close();
+        flashSaved();
+        return;
+      } catch (err) {
+        console.error(err);
+        // fall through to save-as / download
+      }
+    }
+
+    if (fsSupported) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: (fname.textContent && loadedOnce ? fname.textContent.replace(/\.html?$/i, '') : 'document') + '.html',
+          types: [{ description: 'HTML Files', accept: { 'text/html': ['.html'] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(fullHtml);
+        await writable.close();
+        currentFileHandle = handle;
+        const file = await handle.getFile();
+        fname.textContent = file.name;
+        loadedOnce = true;
+        flashSaved();
+      } catch (err) {
+        if (err.name !== 'AbortError') downloadCopy(fullHtml);
+      }
+    } else {
+      downloadCopy(fullHtml);
+    }
+  }
+
+  document.getElementById('btnSave').addEventListener('click', () => saveFile(false));
+  document.getElementById('btnSaveAs').addEventListener('click', () => saveFile(true));
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      saveFile(false);
+    }
+  });
 
   // ---------- Formatting toolbar ----------
   document.querySelectorAll('.tbtn[data-cmd]').forEach(btn => {
@@ -439,8 +533,6 @@ ${bodyHtml}
   }
   editor.addEventListener('keyup', updateToolbarState);
   editor.addEventListener('mouseup', updateToolbarState);
-
-  function updateStatus(){}
 
   // ---------- Drag & drop file onto page ----------
   document.getElementById('pagewrap').addEventListener('dragover', (e) => {
